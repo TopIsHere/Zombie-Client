@@ -1,0 +1,62 @@
+name: Build Zombie Client
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Fabric mod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate wrapper if missing
+        shell: bash
+        run: |
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 9.4.1
+          fi
+          chmod +x gradlew
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+        if: hashFiles('gradle/wrapper/gradle-wrapper.jar') != ''
+
+      - name: Build
+        run: ./gradlew --no-daemon clean build
+
+      - name: Upload mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: zombie-client-${{ github.sha }}
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release for version tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/libs/*.jar
+          generate_release_notes: true
